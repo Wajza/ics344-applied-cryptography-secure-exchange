@@ -11,6 +11,13 @@ from crypto_utils import (
     verify_hmac,
 )
 
+from key_exchange import (
+    generate_dh_parameters,
+    generate_dh_key_pair,
+    derive_shared_secret,
+    derive_session_keys,
+)
+
 
 def check(condition: bool, description: str) -> None:
     """Display a check or failure based on the actual condition."""
@@ -170,6 +177,57 @@ def test_hmac_modified_message():
     print(f"HMAC verification result: {verification_result}")
 
 
+def test_diffie_hellman_key_establishment():
+    parameters = generate_dh_parameters()
+
+    alice_private_key, alice_public_key = generate_dh_key_pair(parameters)
+    bob_private_key, bob_public_key = generate_dh_key_pair(parameters)
+
+    alice_shared_secret = derive_shared_secret(
+        alice_private_key,
+        bob_public_key
+    )
+
+    bob_shared_secret = derive_shared_secret(
+        bob_private_key,
+        alice_public_key
+    )
+
+    alice_aes_key, alice_hmac_key = derive_session_keys(
+        alice_shared_secret
+    )
+
+    bob_aes_key, bob_hmac_key = derive_session_keys(
+        bob_shared_secret
+    )
+
+    print("\nT07 - Diffie-Hellman key establishment")
+
+    check(
+        alice_shared_secret == bob_shared_secret,
+        "Alice and Bob derived the same shared secret"
+    )
+
+    check(
+        alice_aes_key == bob_aes_key,
+        "Alice and Bob derived the same AES key"
+    )
+
+    check(
+        alice_hmac_key == bob_hmac_key,
+        "Alice and Bob derived the same HMAC key"
+    )
+
+    check(
+        alice_aes_key != alice_hmac_key,
+        "AES and HMAC keys are separate"
+    )
+
+    print(f"Shared secret length: {len(alice_shared_secret)} bytes")
+    print(f"AES key length: {len(alice_aes_key)} bytes")
+    print(f"HMAC key length: {len(alice_hmac_key)} bytes")
+
+
 if __name__ == "__main__":
     test_cbc_short_message()
     test_cbc_unaligned_file()
@@ -177,5 +235,9 @@ if __name__ == "__main__":
     test_ctr_unaligned_file()
     test_hmac_valid_message()
     test_hmac_modified_message()
+    test_diffie_hellman_key_establishment()
 
-    print("\nAll AES and HMAC validation checks completed successfully.")
+    print(
+        "\nAll AES, HMAC, and Diffie-Hellman validation checks "
+        "completed successfully."
+    )
