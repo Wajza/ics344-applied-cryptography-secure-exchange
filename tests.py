@@ -6,6 +6,9 @@ from crypto_utils import (
     decrypt_cbc,
     encrypt_ctr,
     decrypt_ctr,
+    generate_hmac_key,
+    create_hmac,
+    verify_hmac,
 )
 
 
@@ -78,7 +81,10 @@ def test_ctr_short_message():
 
     check(recovered_message == message, "Recovered message matches original")
     check(len(nonce) == 16, "CTR nonce is 16 bytes")
-    check(len(ciphertext) == len(message), "CTR ciphertext length equals plaintext length")
+    check(
+        len(ciphertext) == len(message),
+        "CTR ciphertext length equals plaintext length"
+    )
 
     print(f"Plaintext length: {len(message)} bytes")
     print(f"Ciphertext length: {len(ciphertext)} bytes")
@@ -98,11 +104,70 @@ def test_ctr_unaligned_file():
     check(len(original_data) % 16 != 0, "Original file is not block aligned")
     check(recovered_data == original_data, "Recovered file matches original")
     check(len(nonce) == 16, "CTR nonce is 16 bytes")
-    check(len(ciphertext) == len(original_data), "CTR preserves data length")
+    check(
+        len(ciphertext) == len(original_data),
+        "CTR preserves data length"
+    )
 
     print(f"Original file length: {len(original_data)} bytes")
     print(f"CTR ciphertext length: {len(ciphertext)} bytes")
     print(f"CTR nonce length: {len(nonce)} bytes")
+
+
+def test_hmac_valid_message():
+    message = b"ICS344 message protected by HMAC"
+    encryption_key = generate_aes_key()
+    hmac_key = generate_hmac_key()
+
+    ciphertext, iv = encrypt_cbc(message, encryption_key)
+    protected_data = iv + ciphertext
+
+    tag = create_hmac(protected_data, hmac_key)
+    verification_result = verify_hmac(
+        protected_data,
+        tag,
+        hmac_key
+    )
+
+    print("\nT05 - HMAC valid message")
+
+    check(verification_result is True, "Valid HMAC is accepted")
+    check(len(hmac_key) == 32, "HMAC key is 32 bytes")
+    check(len(tag) == 32, "HMAC-SHA-256 tag is 32 bytes")
+
+    print(f"Protected data length: {len(protected_data)} bytes")
+    print(f"HMAC tag length: {len(tag)} bytes")
+
+
+def test_hmac_modified_message():
+    message = b"ICS344 message protected by HMAC"
+    encryption_key = generate_aes_key()
+    hmac_key = generate_hmac_key()
+
+    ciphertext, iv = encrypt_cbc(message, encryption_key)
+    protected_data = iv + ciphertext
+
+    tag = create_hmac(protected_data, hmac_key)
+
+    modified_data = bytearray(protected_data)
+    modified_data[-1] ^= 1
+    modified_data = bytes(modified_data)
+
+    verification_result = verify_hmac(
+        modified_data,
+        tag,
+        hmac_key
+    )
+
+    print("\nT06 - HMAC modified message")
+
+    check(
+        verification_result is False,
+        "Modified protected data is rejected"
+    )
+
+    print("One byte of the protected data was modified")
+    print(f"HMAC verification result: {verification_result}")
 
 
 if __name__ == "__main__":
@@ -110,5 +175,7 @@ if __name__ == "__main__":
     test_cbc_unaligned_file()
     test_ctr_short_message()
     test_ctr_unaligned_file()
+    test_hmac_valid_message()
+    test_hmac_modified_message()
 
-    print("\nAll AES-CBC and AES-CTR validation checks completed successfully.")
+    print("\nAll AES and HMAC validation checks completed successfully.")

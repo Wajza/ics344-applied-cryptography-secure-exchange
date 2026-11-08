@@ -1,13 +1,14 @@
 import os
 
-from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives import hashes, hmac, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 
 AES_KEY_SIZE = 32       # 32 bytes = 256 bits
 AES_BLOCK_SIZE = 128    # AES block size in bits
 IV_SIZE = 16            # CBC IV size
-NONCE_SIZE = 16         # CTR nonce/counter size
+NONCE_SIZE = 16         # CTR nonce size
+HMAC_KEY_SIZE = 32      # 32 bytes = 256 bits
 
 
 def generate_aes_key() -> bytes:
@@ -79,7 +80,7 @@ def encrypt_ctr(plaintext: bytes, key: bytes) -> tuple[bytes, bytes]:
 def decrypt_ctr(ciphertext: bytes, key: bytes, nonce: bytes) -> bytes:
     """Decrypt AES-256-CTR ciphertext."""
     if len(key) != AES_KEY_SIZE:
-        raise ValueError("AES key must be exactly 32 bytes.")
+        raise ValueError("CTR nonce must be exactly 16 bytes.")
 
     if len(nonce) != NONCE_SIZE:
         raise ValueError("CTR nonce must be exactly 16 bytes.")
@@ -93,3 +94,34 @@ def decrypt_ctr(ciphertext: bytes, key: bytes, nonce: bytes) -> bytes:
     plaintext = decryptor.update(ciphertext) + decryptor.finalize()
 
     return plaintext
+
+
+def generate_hmac_key() -> bytes:
+    """Generate a random 256-bit HMAC key."""
+    return os.urandom(HMAC_KEY_SIZE)
+
+
+def create_hmac(data: bytes, key: bytes) -> bytes:
+    """Create an HMAC-SHA-256 tag."""
+    if len(key) != HMAC_KEY_SIZE:
+        raise ValueError("HMAC key must be exactly 32 bytes.")
+
+    hmac_calculator = hmac.HMAC(key, hashes.SHA256())
+    hmac_calculator.update(data)
+
+    return hmac_calculator.finalize()
+
+
+def verify_hmac(data: bytes, tag: bytes, key: bytes) -> bool:
+    """Verify an HMAC-SHA-256 tag."""
+    if len(key) != HMAC_KEY_SIZE:
+        raise ValueError("HMAC key must be exactly 32 bytes.")
+
+    hmac_calculator = hmac.HMAC(key, hashes.SHA256())
+    hmac_calculator.update(data)
+
+    try:
+        hmac_calculator.verify(tag)
+        return True
+    except Exception:
+        return False
