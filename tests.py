@@ -24,6 +24,11 @@ from signatures import (
     verify_signature,
 )
 
+from misuse_experiment import (
+    encrypt_ctr_with_nonce,
+    xor_bytes,
+)
+
 
 def check(condition: bool, description: str) -> None:
     """Display a check or failure based on the actual condition."""
@@ -47,24 +52,9 @@ def test_cbc_short_message():
     check(len(iv) == 16, "CBC IV is 16 bytes")
     check(len(ciphertext) % 16 == 0, "CBC ciphertext is block aligned")
 
-    print(f"Plaintext length: {len(message)} bytes")
-    print(f"Ciphertext length: {len(ciphertext)} bytes")
-    print(f"IV length: {len(iv)} bytes")
-
 
 def test_cbc_unaligned_file():
-    test_folder = Path("test_data")
-    test_folder.mkdir(exist_ok=True)
-
-    file_path = test_folder / "unaligned_sample.txt"
-
-    file_data = (
-        b"This file is intentionally not aligned to the AES block size."
-        b" ICS344 student 202262140."
-    )
-
-    file_path.write_bytes(file_data)
-
+    file_path = Path("test_data") / "unaligned_sample.txt"
     original_data = file_path.read_bytes()
     key = generate_aes_key()
 
@@ -77,10 +67,6 @@ def test_cbc_unaligned_file():
     check(recovered_data == original_data, "Recovered file matches original")
     check(len(iv) == 16, "CBC IV is 16 bytes")
     check(len(ciphertext) % 16 == 0, "CBC ciphertext is block aligned")
-
-    print(f"Original file length: {len(original_data)} bytes")
-    print(f"CBC ciphertext length: {len(ciphertext)} bytes")
-    print(f"CBC IV length: {len(iv)} bytes")
 
 
 def test_ctr_short_message():
@@ -98,10 +84,6 @@ def test_ctr_short_message():
         len(ciphertext) == len(message),
         "CTR ciphertext length equals plaintext length"
     )
-
-    print(f"Plaintext length: {len(message)} bytes")
-    print(f"Ciphertext length: {len(ciphertext)} bytes")
-    print(f"Nonce length: {len(nonce)} bytes")
 
 
 def test_ctr_unaligned_file():
@@ -121,10 +103,6 @@ def test_ctr_unaligned_file():
         len(ciphertext) == len(original_data),
         "CTR preserves data length"
     )
-
-    print(f"Original file length: {len(original_data)} bytes")
-    print(f"CTR ciphertext length: {len(ciphertext)} bytes")
-    print(f"CTR nonce length: {len(nonce)} bytes")
 
 
 def test_hmac_valid_message():
@@ -147,9 +125,6 @@ def test_hmac_valid_message():
     check(verification_result is True, "Valid HMAC is accepted")
     check(len(hmac_key) == 32, "HMAC key is 32 bytes")
     check(len(tag) == 32, "HMAC-SHA-256 tag is 32 bytes")
-
-    print(f"Protected data length: {len(protected_data)} bytes")
-    print(f"HMAC tag length: {len(tag)} bytes")
 
 
 def test_hmac_modified_message():
@@ -178,9 +153,6 @@ def test_hmac_modified_message():
         verification_result is False,
         "Modified protected data is rejected"
     )
-
-    print("One byte of the protected data was modified")
-    print(f"HMAC verification result: {verification_result}")
 
 
 def test_diffie_hellman_key_establishment():
@@ -229,10 +201,6 @@ def test_diffie_hellman_key_establishment():
         "AES and HMAC keys are separate"
     )
 
-    print(f"Shared secret length: {len(alice_shared_secret)} bytes")
-    print(f"AES key length: {len(alice_aes_key)} bytes")
-    print(f"HMAC key length: {len(alice_hmac_key)} bytes")
-
 
 def test_valid_digital_signature():
     message = b"ICS344 digitally signed message"
@@ -258,8 +226,6 @@ def test_valid_digital_signature():
         "Digital signature was generated"
     )
 
-    print(f"Signature length: {len(signature)} bytes")
-
 
 def test_modified_message_signature():
     message = b"ICS344 digitally signed message"
@@ -281,7 +247,95 @@ def test_modified_message_signature():
         "Modified message signature is rejected"
     )
 
-    print(f"Verification result: {verification_result}")
+
+def test_repeated_message_behavior():
+    message = b"ICS344 repeated message"
+    key = generate_aes_key()
+
+    ciphertext_one, nonce_one = encrypt_ctr(message, key)
+    ciphertext_two, nonce_two = encrypt_ctr(message, key)
+
+    print("\nT10 - Repeated-message behaviour")
+
+    check(
+        nonce_one != nonce_two,
+        "Repeated messages use different nonces"
+    )
+
+    check(
+        ciphertext_one != ciphertext_two,
+        "Repeated messages produce different ciphertexts"
+    )
+
+    check(
+        decrypt_ctr(ciphertext_one, key, nonce_one) == message,
+        "First repeated message decrypts correctly"
+    )
+
+    check(
+        decrypt_ctr(ciphertext_two, key, nonce_two) == message,
+        "Second repeated message decrypts correctly"
+    )
+
+
+def test_incorrect_key_behavior():
+    message = b"ICS344 incorrect key test"
+    correct_key = generate_aes_key()
+    incorrect_key = generate_aes_key()
+
+    ciphertext, iv = encrypt_cbc(message, correct_key)
+
+    decryption_failed = False
+
+    try:
+        decrypt_cbc(ciphertext, incorrect_key, iv)
+    except Exception:
+        decryption_failed = True
+
+    print("\nT11 - Incorrect-key behaviour")
+
+    check(
+        decryption_failed,
+        "Decryption with an incorrect key is rejected"
+    )
+
+
+def test_nonce_reuse_misuse():
+    message_one = b"ICS344 message one!"
+    message_two = b"ICS344 message two!"
+
+    key = generate_aes_key()
+
+    _, reused_nonce = encrypt_ctr(message_one, key)
+
+    ciphertext_one = encrypt_ctr_with_nonce(
+        message_one,
+        key,
+        reused_nonce
+    )
+
+    ciphertext_two = encrypt_ctr_with_nonce(
+        message_two,
+        key,
+        reused_nonce
+    )
+
+    ciphertext_xor = xor_bytes(
+        ciphertext_one,
+        ciphertext_two
+    )
+
+    plaintext_xor = xor_bytes(
+        message_one,
+        message_two
+    )
+
+    print("\nT12 - CTR nonce-reuse misuse")
+
+    check(
+        ciphertext_xor == plaintext_xor,
+        "Nonce reuse exposes the plaintext XOR relationship"
+    )
 
 
 if __name__ == "__main__":
@@ -294,8 +348,10 @@ if __name__ == "__main__":
     test_diffie_hellman_key_establishment()
     test_valid_digital_signature()
     test_modified_message_signature()
+    test_repeated_message_behavior()
+    test_incorrect_key_behavior()
+    test_nonce_reuse_misuse()
 
     print(
-        "\nAll AES, HMAC, Diffie-Hellman, and digital signature "
-        "validation checks completed successfully."
+        "\nAll comparative security testing checks completed successfully."
     )
