@@ -3,6 +3,15 @@ from pathlib import Path
 from crypto_utils import generate_aes_key, encrypt_cbc, decrypt_cbc
 
 
+def check(condition: bool, description: str) -> None:
+    """Display a check or failure based on the actual test condition."""
+    if condition:
+        print(f"[✓] {description}")
+    else:
+        print(f"[✗] {description}")
+        raise AssertionError(f"Check failed: {description}")
+
+
 def test_cbc_short_message():
     message = b"ICS344 short message"
     key = generate_aes_key()
@@ -10,13 +19,15 @@ def test_cbc_short_message():
     ciphertext, iv = encrypt_cbc(message, key)
     recovered_message = decrypt_cbc(ciphertext, key, iv)
 
-    assert recovered_message == message
+    print("T01 - AES-CBC short message")
 
-    print("T01 - AES-CBC short message round trip: PASS")
+    check(recovered_message == message, "Recovered message matches original")
+    check(len(iv) == 16, "IV is 16 bytes")
+    check(len(ciphertext) % 16 == 0, "Ciphertext is block aligned")
+
     print(f"Plaintext length: {len(message)} bytes")
     print(f"Ciphertext length: {len(ciphertext)} bytes")
     print(f"IV length: {len(iv)} bytes")
-    print(f"Recovered correctly: {recovered_message == message}")
 
 
 def test_cbc_unaligned_file():
@@ -38,20 +49,19 @@ def test_cbc_unaligned_file():
     ciphertext, iv = encrypt_cbc(original_data, key)
     recovered_data = decrypt_cbc(ciphertext, key, iv)
 
-    assert len(original_data) % 16 != 0
-    assert recovered_data == original_data
+    print("\nT02 - AES-CBC unaligned file")
 
-    print("\nT02 - AES-CBC unaligned file round trip: PASS")
+    check(len(original_data) % 16 != 0, "Original file is not block aligned")
+    check(recovered_data == original_data, "Recovered file matches original")
+    check(len(iv) == 16, "IV is 16 bytes")
+    check(len(ciphertext) % 16 == 0, "Ciphertext is block aligned")
+
     print(f"Original file length: {len(original_data)} bytes")
     print(f"Ciphertext length: {len(ciphertext)} bytes")
     print(f"IV length: {len(iv)} bytes")
-    print(
-        f"Original size aligned to 16 bytes: "
-        f"{len(original_data) % 16 == 0}"
-    )
-    print(f"Recovered correctly: {recovered_data == original_data}")
 
 
 if __name__ == "__main__":
     test_cbc_short_message()
     test_cbc_unaligned_file()
+    print("\nAll validation checks completed successfully.")
