@@ -1,12 +1,13 @@
 import os
 
-from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 
 AES_KEY_SIZE = 32       # 32 bytes = 256 bits
 AES_BLOCK_SIZE = 128    # AES block size in bits
-IV_SIZE = 16            # 16 bytes = 128 bits
+IV_SIZE = 16            # CBC IV size
+NONCE_SIZE = 16         # CTR nonce/counter size
 
 
 def generate_aes_key() -> bytes:
@@ -15,12 +16,7 @@ def generate_aes_key() -> bytes:
 
 
 def encrypt_cbc(plaintext: bytes, key: bytes) -> tuple[bytes, bytes]:
-    """
-    Encrypt plaintext using AES-256-CBC.
-
-    Returns:
-        ciphertext, iv
-    """
+    """Encrypt plaintext using AES-256-CBC with PKCS7 padding."""
     if len(key) != AES_KEY_SIZE:
         raise ValueError("AES key must be exactly 32 bytes.")
 
@@ -41,12 +37,7 @@ def encrypt_cbc(plaintext: bytes, key: bytes) -> tuple[bytes, bytes]:
 
 
 def decrypt_cbc(ciphertext: bytes, key: bytes, iv: bytes) -> bytes:
-    """
-    Decrypt AES-256-CBC ciphertext and remove PKCS7 padding.
-
-    Returns:
-        Original plaintext
-    """
+    """Decrypt AES-256-CBC ciphertext and remove PKCS7 padding."""
     if len(key) != AES_KEY_SIZE:
         raise ValueError("AES key must be exactly 32 bytes.")
 
@@ -63,5 +54,42 @@ def decrypt_cbc(ciphertext: bytes, key: bytes, iv: bytes) -> bytes:
 
     unpadder = padding.PKCS7(AES_BLOCK_SIZE).unpadder()
     plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+
+    return plaintext
+
+
+def encrypt_ctr(plaintext: bytes, key: bytes) -> tuple[bytes, bytes]:
+    """Encrypt plaintext using AES-256-CTR."""
+    if len(key) != AES_KEY_SIZE:
+        raise ValueError("AES key must be exactly 32 bytes.")
+
+    nonce = os.urandom(NONCE_SIZE)
+
+    cipher = Cipher(
+        algorithms.AES(key),
+        modes.CTR(nonce)
+    )
+
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+
+    return ciphertext, nonce
+
+
+def decrypt_ctr(ciphertext: bytes, key: bytes, nonce: bytes) -> bytes:
+    """Decrypt AES-256-CTR ciphertext."""
+    if len(key) != AES_KEY_SIZE:
+        raise ValueError("AES key must be exactly 32 bytes.")
+
+    if len(nonce) != NONCE_SIZE:
+        raise ValueError("CTR nonce must be exactly 16 bytes.")
+
+    cipher = Cipher(
+        algorithms.AES(key),
+        modes.CTR(nonce)
+    )
+
+    decryptor = cipher.decryptor()
+    plaintext = decryptor.update(ciphertext) + decryptor.finalize()
 
     return plaintext
