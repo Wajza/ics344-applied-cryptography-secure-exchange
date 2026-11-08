@@ -18,6 +18,12 @@ from key_exchange import (
     derive_session_keys,
 )
 
+from signatures import (
+    generate_signing_key_pair,
+    sign_message,
+    verify_signature,
+)
+
 
 def check(condition: bool, description: str) -> None:
     """Display a check or failure based on the actual condition."""
@@ -228,6 +234,56 @@ def test_diffie_hellman_key_establishment():
     print(f"HMAC key length: {len(alice_hmac_key)} bytes")
 
 
+def test_valid_digital_signature():
+    message = b"ICS344 digitally signed message"
+
+    private_key, public_key = generate_signing_key_pair()
+    signature = sign_message(message, private_key)
+
+    verification_result = verify_signature(
+        message,
+        signature,
+        public_key
+    )
+
+    print("\nT08 - Valid digital signature")
+
+    check(
+        verification_result is True,
+        "Unmodified message signature is accepted"
+    )
+
+    check(
+        len(signature) > 0,
+        "Digital signature was generated"
+    )
+
+    print(f"Signature length: {len(signature)} bytes")
+
+
+def test_modified_message_signature():
+    message = b"ICS344 digitally signed message"
+    modified_message = b"ICS344 modified signed message"
+
+    private_key, public_key = generate_signing_key_pair()
+    signature = sign_message(message, private_key)
+
+    verification_result = verify_signature(
+        modified_message,
+        signature,
+        public_key
+    )
+
+    print("\nT09 - Modified message digital signature")
+
+    check(
+        verification_result is False,
+        "Modified message signature is rejected"
+    )
+
+    print(f"Verification result: {verification_result}")
+
+
 if __name__ == "__main__":
     test_cbc_short_message()
     test_cbc_unaligned_file()
@@ -236,8 +292,10 @@ if __name__ == "__main__":
     test_hmac_valid_message()
     test_hmac_modified_message()
     test_diffie_hellman_key_establishment()
+    test_valid_digital_signature()
+    test_modified_message_signature()
 
     print(
-        "\nAll AES, HMAC, and Diffie-Hellman validation checks "
-        "completed successfully."
+        "\nAll AES, HMAC, Diffie-Hellman, and digital signature "
+        "validation checks completed successfully."
     )
